@@ -30,73 +30,73 @@ import           Control.Applicative ((<$>))
 import           Data.Char
 import           Data.List
 import           Data.Maybe
+import           Data.MultiSet       (MultiSet)
 import qualified Data.MultiSet       as MS
 import           Data.Ord
 import           Data.Text           (Text)
 import qualified Data.Text           as T
 import qualified Data.Text.IO        as TIO
 import qualified Data.Text.Encoding        as TE
-import qualified Data.Tree           as Tree
+import           Data.Tree           (Tree)
+import qualified Data.Tree           as Tr
+import           Data.Set            (Set)
+import qualified Data.Set            as S
 import           System.Environment
 import           System.IO
 import Data.Digest.Pure.MD5
 import qualified Data.ByteString.Lazy.Char8 as B
 
 type AnagramWord = Text
-type Dictionary = [AnagramWord]
-type LetterSet = MS.MultiSet Char
-type AnagramStep = (MS.MultiSet AnagramWord, LetterSet)
+type Dictionary = Set AnagramWord
 
-anagram = sort "poultry outwits ants"
+type Anagram = MultiSet AnagramWord
+type Letters = MultiSet Char
 
-interestingAnagramWord :: AnagramWord -> Bool
-interestingAnagramWord "a" = True
-interestingAnagramWord "i" = True
-interestingAnagramWord s = T.length s > 1
+type SearchState = (Anagram, Letters, Dictionary)
 
-loadDictionary :: FilePath -> IO Dictionary
-loadDictionary file =
-  (sortBy (flip (comparing T.length)) .
-   filter interestingAnagramWord .
-   T.lines) <$>
-  TIO.readFile file
+-- | Generate anagrams of the given word using the dictionary supplied.
+-- The anagrams with the fewest words are returned first, which can lead to
+-- high memory usage.
+anagrams :: Dictionary -> Text -> [Text]
+anagrams dict source =
+  map extractAnagram $ catMaybes $ Tr.flatten $ search dict source
 
-toLetterSet :: AnagramWord -> LetterSet
-toLetterSet = MS.fromList . T.unpack . T.toLower
+search :: Dictionary -> Text -> Tree (Maybe Anagram)
+search dict source = Tr.unfoldTree expand initialState
+  where initialState = (MS.empty, wordLetters source, dict)
 
-extractAnagramWord :: LetterSet -> AnagramWord -> Maybe LetterSet
-extractAnagramWord letterSet word =
-  if MS.isSubsetOf wordSet letterSet
-     then Just (MS.difference letterSet wordSet)
-     else Nothing
-  where wordSet = toLetterSet word
+extractAnagram :: Anagram -> Text
+extractAnagram = T.unwords . MS.toList
 
-unfoldAnagram :: Dictionary -> AnagramStep -> (AnagramStep, [AnagramStep])
-unfoldAnagram dictionary anagram@(wordsSoFar,letterSetSoFar) =
-  (anagram,anagrams')
-  where anagrams' =
-          mapMaybe anagramStep dictionary
-        anagramStep newAnagramWord =
-          case extractAnagramWord letterSetSoFar newAnagramWord of
-            Nothing -> Nothing
-            Just newLetterSet ->
-              Just (MS.insert newAnagramWord wordsSoFar,newLetterSet)
+expand :: SearchState -> (Maybe Anagram, [SearchState])
+expand (wordsSoFar, remaining, dict) = (completeAnagram, nextStates)
+  where
+    completeAnagram = if MS.null remaining then Just wordsSoFar else Nothing
+    possibleAnagramWords = S.filter (remaining `canSpell`) dict
+    -- As we generate new branches, we remove words for which we have
+    -- already created a branch: this ensures that independent branches
+    -- will not generate identical sets of words.
+    nextStates = fst $ foldl go ([], possibleAnagramWords) $ S.toList possibleAnagramWords
+    go (states, d) word =
+      ((MS.insert word wordsSoFar,
+        remaining `MS.difference` wordLetters word, d):states,
+       S.delete word d)
+    canSpell letters word = wordLetters word `MS.isSubsetOf` letters
 
-anagrams :: Dictionary -> AnagramWord -> [[AnagramWord]]
-anagrams dictionary word =
-  map (MS.toList . fst) $
-  filter (MS.null . snd) $
-  Tree.flatten $
-  Tree.unfoldTree (unfoldAnagram dictionary)
-                  (MS.empty,toLetterSet word)
+wordLetters :: Text -> Letters
+wordLetters = MS.fromList . filter isAlpha . T.unpack . T.toLower
 
-
-findMatches ws phrase = anagrams ws (T.pack $ filter (not . isSpace) phrase)
+readDict :: IO Dictionary
+readDict = (S.filter goodWord . S.fromList . T.lines) <$> TIO.readFile "wordlist"
+  where goodWord "A" = True
+        goodWord "I" = True
+        goodWord "O" = True
+        goodWord w = all isAlpha (T.unpack w)
 
 printMatch phrase =
-  case md5hash `elem` hashes of
-    True -> putStrLn $ "Match Found" ++ md5hash ++ " - " ++ show phrase
-    False -> putStrLn $ md5hash ++ " - " ++ show phrase
+  if md5hash `elem` hashes
+    then putStrLn $ "Match Found " ++ md5hash ++ " - " ++ show phrase
+    else return ()
   where
     md5hash = (show . md5 . B.pack) phrase
     hashes = ["e4820b45d2277f3844eac66c903e84be"
@@ -104,11 +104,9 @@ printMatch phrase =
               , "665e5bcb0c20062fe8abaaf4628bb154"]
 
 
-
 main :: IO ()
 main =
   do [phrase] <- getArgs
-     hSetBuffering stdout NoBuffering
-     ws <- loadDictionary "wordlist"
-     mapM_ (printMatch . T.unpack . T.unwords) $
-       findMatches ws phrase
+     dict <- readDict
+     mapM_ (printMatch . T.unpack) $
+       anagrams dict (T.pack phrase)
