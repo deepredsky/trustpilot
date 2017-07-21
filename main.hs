@@ -32,38 +32,51 @@ import           Data.List
 import           Data.Maybe
 import           Data.MultiSet       (MultiSet)
 import qualified Data.MultiSet       as MS
-import           Data.Ord
 import           Data.Text           (Text)
 import qualified Data.Text           as T
 import qualified Data.Text.IO        as TIO
-import qualified Data.Text.Encoding        as TE
 import           Data.Tree           (Tree)
 import qualified Data.Tree           as Tr
 import           Data.Set            (Set)
 import qualified Data.Set            as S
+import           Data.Map            (Map)
+import qualified Data.Map            as Map
 import           System.Environment
-import           System.IO
-import Data.Digest.Pure.MD5
-import qualified Data.ByteString.Lazy.Char8 as B
+--import Data.Digest.Pure.MD5
+import Crypto.Hash.MD5 as MD5
+import qualified Data.ByteString.Char8 as B
+import Data.ByteString.Base16
+
+
+import Data.Text.ICU.Char
+import Data.Text.ICU.Normalize
 
 type AnagramWord = Text
 type Dictionary = Set AnagramWord
 
 type Anagram = MultiSet AnagramWord
+type AnagramDict = Map Text [Text]
 type Letters = MultiSet Char
 
-type SearchState = (Anagram, Letters, Dictionary)
+type SearchState = (Anagram, Letters, [AnagramWord])
 
 -- | Generate anagrams of the given word using the dictionary supplied.
 -- The anagrams with the fewest words are returned first, which can lead to
 -- high memory usage.
-anagrams :: Dictionary -> Text -> [Text]
+anagrams :: AnagramDict -> Text -> [Text]
 anagrams dict source =
-  map extractAnagram $ catMaybes $ Tr.flatten $ search dict source
+  concatMap (buildPossibleAnagrams dict) $ catMaybes $ Tr.flatten $ search dict source
 
-search :: Dictionary -> Text -> Tree (Maybe Anagram)
+buildPossibleAnagrams :: AnagramDict -> Anagram  -> [Text]
+buildPossibleAnagrams dict anagram = map T.unwords variations
+  where
+    items = catMaybes $ map (\x -> Map.lookup x dict) $ MS.toList anagram
+    variations = filter matchesHashes $ concatMap permutations (sequence items)
+
+search :: AnagramDict -> Text -> Tree (Maybe Anagram)
 search dict source = Tr.unfoldTree expand initialState
-  where initialState = (MS.empty, wordLetters source, dict)
+  where initialState = (MS.empty, wordLetters source, dictWords)
+        dictWords = Map.keys dict
 
 extractAnagram :: Anagram -> Text
 extractAnagram = T.unwords . MS.toList
@@ -71,42 +84,72 @@ extractAnagram = T.unwords . MS.toList
 expand :: SearchState -> (Maybe Anagram, [SearchState])
 expand (wordsSoFar, remaining, dict) = (completeAnagram, nextStates)
   where
-    completeAnagram = if MS.null remaining then Just wordsSoFar else Nothing
-    possibleAnagramWords = S.filter (remaining `canSpell`) dict
+    completeAnagram = maybeCompleteAnagram wordsSoFar remaining
+    possibleAnagramWords = filter (remaining `containsWord`) dict
     -- As we generate new branches, we remove words for which we have
     -- already created a branch: this ensures that independent branches
     -- will not generate identical sets of words.
-    nextStates = fst $ foldl go ([], possibleAnagramWords) $ S.toList possibleAnagramWords
+    nextStates = fst $ foldl go ([], possibleAnagramWords) $ possibleAnagramWords
     go (states, d) word =
       ((MS.insert word wordsSoFar,
         remaining `MS.difference` wordLetters word, d):states,
-       S.delete word d)
-    canSpell letters word = wordLetters word `MS.isSubsetOf` letters
+       delete word d)
+
+-- word is formed by letters?
+containsWord :: Letters -> Text -> Bool
+containsWord letters word = wordLetters word' `MS.isSubsetOf` letters
+  where
+    word' = T.filter isAlpha $ canonicalForm word
+
+maybeCompleteAnagram :: Anagram -> Letters -> Maybe Anagram
+maybeCompleteAnagram wordsSoFar remaining
+  | MS.null remaining = Just wordsSoFar
+  | otherwise = Nothing
+
+matchesHashes :: [Text] -> Bool
+matchesHashes anagram = md5hash `elem` hashes
+    where
+      md5hash = (B.unpack . encode . MD5.hash . B.pack . T.unpack . T.unwords) anagram
+
+hashes :: [String]
+hashes = ["25c5b9ee90c7e8e74afe8427b2d7f8d2", "e4820b45d2277f3844eac66c903e84be" , "23170acc097c24edb98fc5488ab033fe" , "665e5bcb0c20062fe8abaaf4628bb154"]
 
 wordLetters :: Text -> Letters
 wordLetters = MS.fromList . filter isAlpha . T.unpack . T.toLower
 
-readDict :: IO Dictionary
-readDict = (S.filter goodWord . S.fromList . T.lines) <$> TIO.readFile "wordlist"
+readDictFiltered :: FilePath -> Text -> IO Dictionary
+readDictFiltered file phrase = (S.filter goodWord . S.fromList . T.lines) <$> TIO.readFile file
   where goodWord "A" = True
         goodWord "I" = True
         goodWord "O" = True
-        goodWord w = all isAlpha (T.unpack w)
+        goodWord w =  T.length w > 3 && containsWord (wordLetters phrase) w
 
+buildAnagarmDict :: Dictionary -> Map Text [Text]
+buildAnagarmDict dict = foldr insertWord Map.empty $ S.toList dict
+  where
+    insertWord word map = Map.insertWith (++) (wordKey word) [word] map
+    wordKey word = (T.pack . sort . T.unpack . T.filter isAlpha) $ canonicalForm word
+
+printMatch :: String -> IO ()
 printMatch phrase =
   if md5hash `elem` hashes
     then putStrLn $ "Match Found " ++ md5hash ++ " - " ++ show phrase
     else return ()
   where
-    md5hash = (show . md5 . B.pack) phrase
-    hashes = ["e4820b45d2277f3844eac66c903e84be"
-              , "23170acc097c24edb98fc5488ab033fe"
-              , "665e5bcb0c20062fe8abaaf4628bb154"]
+    md5hash = (B.unpack . encode . MD5.hash . B.pack) phrase
 
+canonicalForm :: Text -> Text
+canonicalForm s = noAccents
+  where
+    noAccents = T.filter (not . property Diacritic) normalizedText
+    normalizedText = normalize NFD s
 
 main :: IO ()
 main =
-  do [phrase] <- getArgs
-     dict <- readDict
-     mapM_ (printMatch . T.unpack) $
-       anagrams dict (T.pack phrase)
+  do (dictionary:phrase:_) <- getArgs
+     dict <- readDictFiltered dictionary (T.pack phrase)
+     let anagramWords = buildAnagarmDict dict
+     print $ "Total words: " ++ show (length dict)
+     print $ "Total anagram words: " ++ show (length $ Map.keys anagramWords)
+     mapM_(print . T.unpack) $
+       take 3 $ anagrams anagramWords (T.pack phrase)
