@@ -110,7 +110,10 @@ matchesHashes anagram = md5hash `elem` hashes
       md5hash = (B.unpack . encode . MD5.hash . B.pack . T.unpack . T.unwords) anagram
 
 hashes :: [String]
-hashes = ["25c5b9ee90c7e8e74afe8427b2d7f8d2", "e4820b45d2277f3844eac66c903e84be" , "23170acc097c24edb98fc5488ab033fe" , "665e5bcb0c20062fe8abaaf4628bb154"]
+hashes = [ "25c5b9ee90c7e8e74afe8427b2d7f8d2"
+          ,"e4820b45d2277f3844eac66c903e84be"
+          ,"23170acc097c24edb98fc5488ab033fe"
+          ,"665e5bcb0c20062fe8abaaf4628bb154"]
 
 wordLetters :: Text -> Letters
 wordLetters = MS.fromList . filter isAlpha . T.unpack . T.toLower
