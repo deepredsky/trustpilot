@@ -99,6 +99,7 @@ containsWord letters word = wordLetters word' `MS.isSubsetOf` letters
 
 maybeCompleteAnagram :: Anagram -> Letters -> Maybe Anagram
 maybeCompleteAnagram wordsSoFar remaining
+  | length wordsSoFar > 4 = Nothing
   | MS.null remaining = Just wordsSoFar
   | otherwise = Nothing
 
