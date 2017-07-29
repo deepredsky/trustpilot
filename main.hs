@@ -119,7 +119,7 @@ readDictFiltered file phrase = (S.filter goodWord . S.fromList . T.lines) <$> TI
   where goodWord "A" = True
         goodWord "I" = True
         goodWord "O" = True
-        goodWord w =  T.length w > 3 && containsWord (wordLetters phrase) w
+        goodWord w = T.length w > 1 && containsWord (wordLetters phrase) w
 
 buildAnagarmDict :: Dictionary -> Map Text [Text]
 buildAnagarmDict dict = foldr insertWord Map.empty $ S.toList dict
