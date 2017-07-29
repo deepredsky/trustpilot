@@ -29,6 +29,7 @@ module Main where
 import           Control.Applicative ((<$>))
 import           Data.Char
 import           Data.List
+import           Data.Ord
 import           Data.Maybe
 import           Data.MultiSet       (MultiSet)
 import qualified Data.MultiSet       as MS
@@ -42,11 +43,9 @@ import qualified Data.Set            as S
 import           Data.Map            (Map)
 import qualified Data.Map            as Map
 import           System.Environment
---import Data.Digest.Pure.MD5
 import Crypto.Hash.MD5 as MD5
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
-
 
 import Data.Text.ICU.Char
 import Data.Text.ICU.Normalize
@@ -60,9 +59,6 @@ type Letters = MultiSet Char
 
 type SearchState = (Anagram, Letters, [AnagramWord])
 
--- | Generate anagrams of the given word using the dictionary supplied.
--- The anagrams with the fewest words are returned first, which can lead to
--- high memory usage.
 anagrams :: AnagramDict -> Text -> [Text]
 anagrams dict source =
   concatMap (buildPossibleAnagrams dict) $ catMaybes $ Tr.flatten $ search dict source
