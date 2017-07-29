@@ -81,21 +81,22 @@ expand :: SearchState -> (Maybe Anagram, [SearchState])
 expand (wordsSoFar, remaining, dict) = (completeAnagram, nextStates)
   where
     completeAnagram = maybeCompleteAnagram wordsSoFar remaining
-    possibleAnagramWords = filter (remaining `containsWord`) dict
-    -- As we generate new branches, we remove words for which we have
-    -- already created a branch: this ensures that independent branches
-    -- will not generate identical sets of words.
+    possibleAnagramWords = filter (remaining `containsWord'`) dict
     nextStates = fst $ foldl go ([], possibleAnagramWords) $ possibleAnagramWords
     go (states, d) word =
       ((MS.insert word wordsSoFar,
         remaining `MS.difference` wordLetters word, d):states,
        delete word d)
 
--- word is formed by letters?
 containsWord :: Letters -> Text -> Bool
 containsWord letters word = wordLetters word' `MS.isSubsetOf` letters
   where
     word' = T.filter isAlpha $ canonicalForm word
+
+containsWord' :: Letters -> Text -> Bool
+containsWord' letters word = wordLetters word' `MS.isSubsetOf` letters
+  where
+    word' = T.filter isAlpha word
 
 maybeCompleteAnagram :: Anagram -> Letters -> Maybe Anagram
 maybeCompleteAnagram wordsSoFar remaining
