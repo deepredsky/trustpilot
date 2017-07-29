@@ -130,9 +130,7 @@ buildAnagarmDict dict = foldr insertWord Map.empty $ S.toList dict
 
 printMatch :: String -> IO ()
 printMatch phrase =
-  if md5hash `elem` hashes
-    then putStrLn $ "Match Found " ++ md5hash ++ " - " ++ show phrase
-    else return ()
+  putStrLn $ md5hash ++ " - " ++ show phrase
   where
     md5hash = (B.unpack . encode . MD5.hash . B.pack) phrase
 
