@@ -72,7 +72,7 @@ buildPossibleAnagrams dict anagram = map T.unwords variations
 search :: AnagramDict -> Text -> Tree (Maybe Anagram)
 search dict source = Tr.unfoldTree expand initialState
   where initialState = (MS.empty, wordLetters source, dictWords)
-        dictWords = Map.keys dict
+        dictWords = reverse $  sortBy (comparing T.length) (Map.keys dict)
 
 extractAnagram :: Anagram -> Text
 extractAnagram = T.unwords . MS.toList
