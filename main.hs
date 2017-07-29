@@ -147,5 +147,5 @@ main =
      let anagramWords = buildAnagarmDict dict
      print $ "Total words: " ++ show (length dict)
      print $ "Total anagram words: " ++ show (length $ Map.keys anagramWords)
-     mapM_(print . T.unpack) $
-       take 3 $ anagrams anagramWords (T.pack phrase)
+     mapM_(printMatch . T.unpack) $
+       take 4 $ anagrams anagramWords (T.pack phrase)
