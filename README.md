@@ -6,22 +6,22 @@ All three hashes was solved in about 12 mins
 
 ## Installation
 
-Basic compile with opimized threaded flag.
+Basic compile stack
 
 ```
-stack ghc main.hs --  -O2 -threaded -o pilot
+stack build
 ```
 
 ## Usage
 
 ```
-pilot <dictionary filepath> <anagram phrase>
+trustpilot <dictionary filepath> <anagram phrase>
 ```
 
 ## Example
 
 ```
-time ./pilot wordlist "poultry outwits ants"
+time trustpilot wordlist "poultry outwits ants"
 "Total words: 2486"
 "Total anagram words: 1366"
 e4820b45d2277f3844eac66c903e84be - "<redacted>"
